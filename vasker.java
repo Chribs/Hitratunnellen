@@ -24,6 +24,7 @@ public class vasker {
 			Port s1 = brick.getPort("S1"); // fargesensor
  			Port s2 = brick.getPort("S2"); // trykksensor
  			Port s3 = brick.getPort("S3"); // lydsensor
+ 			Port s4 = brick.getPort("S4"); // distansesensor
 
 			EV3ColorSensor fargeSensor = new EV3ColorSensor(s1); // fargesensor
 			SampleProvider fargeLeser = fargeSensor.getMode("RGB");  // svart = 0.01..
@@ -37,44 +38,94 @@ public class vasker {
 			SampleProvider lydLeser = lydSensor.getDBMode(); // setter i rett modus (kan bruke hørselstilnærming også)
 			float[] lydSample = new float[lydLeser.sampleSize()]; // avlest verdi
 
-			Motor.A.setSpeed(200);
-			Motor.B.setSpeed(200);
-			Motor.C.setSpeed(200);
+			EV3UltrasonicSensor distSensor = new EV3UltrasonicSensor(s4);
+			SampleProvider distLeser = distSensor.getDistanceMode();
+			float[] distSample = new float[distLeser.sampleSize()];
+
+			Motor.B.setSpeed(25);
+			Motor.C.setSpeed(25);
+			Motor.A.setSpeed(15); //styring
 
 			int veiFarge = 0;
 			for (int i = 0; i<100; i++){
 				fargeLeser.fetchSample(fargeSample, 0);
 				veiFarge += fargeSample[0]* 100;
 			}
-			veiFarge = veiFarge / 100 + 5;
+			veiFarge = veiFarge / 100 - 5;
 
 			lydLeser.fetchSample(lydSample, 0);
 			float stille = lydSample[0];
-			float lydMax = 40;
+			float lydMax = 30;
 			boolean fortsett = true;
-			trykkLeser.fetchSample(trykkSample, 0);
+			//trykkLeser.fetchSample(trykkSample, 0);
+			int retning = 1;
+			distLeser.fetchSample(distSample, 0);
+			float distStart = distSample[0];
+			System.out.println("Distanse er " + distStart);
+			float maxDist = 0.003f;
+
+
+			System.out.println("Starter loop");
 
 			while (fortsett) {
-				if (lydSample[0] > lydMax) {
-					Motor.A.stop();
-					Motor.B.stop();
-					Motor.C.stop();
-					Thread.sleep(4000);
-				} else if (fargeSample[0] * 100 < veiFarge) {
-					Motor.B.stop();
-					Motor.A.forward();
-					Thread.sleep(200);
-				} else if (trykkSample[0] > 0) {
-					fortsett = false;
-				} else {
-					Motor.A.forward();
-					Motor.B.forward();
-					Motor.C.forward();
-				}
 
-				trykkLeser.fetchSample(trykkSample, 0);
+				//trykkLeser.fetchSample(trykkSample, 0);
+				distLeser.fetchSample(distSample, 0);
+				//System.out.println("Distanse " + distSample[0]);
 				lydLeser.fetchSample(lydSample, 0);
 				fargeLeser.fetchSample(fargeSample, 0);
+				//System.out.println("Sampler");
+				float distTest = distSample[0];
+				//System.out.println((distStart - maxDist) + "-" + (distStart + maxDist) + ": " + distTest);
+
+				if (lydSample[0] > lydMax) {
+					Motor.B.stop();
+					Motor.C.stop();
+					System.out.println("Hog lyd!");
+					Thread.sleep(4000);
+				} else if (fargeSample[0] * 100 < veiFarge) {
+					System.out.println("Snur");
+					Motor.B.setSpeed(30);
+					Motor.C.setSpeed(30);
+					if (retning == 1) {
+						retning = 0;
+						Motor.B.forward();
+						Motor.C.forward();
+						Thread.sleep(1000);
+					} else {
+						retning = 1;
+						Motor.B.backward();
+						Motor.C.backward();
+						Thread.sleep(1000);
+					}
+					Motor.B.setSpeed(25);
+					Motor.C.setSpeed(25);
+				} else if (trykkSample != null && trykkSample[0] > 0) {
+					System.out.println("Trykket");
+					fortsett = false;
+				} else if (retning == 1) {
+					//System.out.println("Kjorer fremover");
+					Motor.B.backward();
+					Motor.C.backward();
+					if (distTest < (distStart - maxDist)) {
+						Motor.A.forward();
+						System.out.println("Svinger venstre");
+					} else if (distTest > (distStart + maxDist) ) {
+						Motor.A.backward();
+						System.out.println("Svinger hoyre");
+					}
+					Thread.sleep(200);
+				} else {
+					//System.out.println("Kjorer bakover");
+					Motor.B.forward();
+					Motor.C.forward();
+					if (distSample[0] < (distStart - maxDist) ) {
+						Motor.A.backward();
+					} else if (distSample[0] > (distStart + maxDist) ) {
+						Motor.A.forward();
+					}
+					Thread.sleep(200);
+				}
 
 				Motor.A.stop();
 				Motor.B.stop();
